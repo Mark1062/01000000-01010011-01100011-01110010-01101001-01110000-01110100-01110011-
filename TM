@@ -1,0 +1,384 @@
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.net.URL;
+
+import javax.imageio.ImageIO;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.GroupLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.SwingUtilities;
+import javax.swing.GroupLayout.Alignment;
+import javax.swing.LayoutStyle.ComponentPlacement;
+
+import org.dreambot.api.methods.Calculations;
+import org.dreambot.api.methods.container.impl.Inventory;
+import org.dreambot.api.methods.container.impl.bank.Bank;
+import org.dreambot.api.methods.container.impl.bank.BankLocation;
+import org.dreambot.api.methods.grandexchange.LivePrices;
+import org.dreambot.api.methods.input.Camera;
+import org.dreambot.api.methods.skills.Skill;
+import org.dreambot.api.methods.skills.SkillTracker;
+import org.dreambot.api.methods.skills.Skills;
+import org.dreambot.api.methods.tabs.Tab;
+import org.dreambot.api.methods.tabs.Tabs;
+import org.dreambot.api.methods.widget.Widgets;
+import org.dreambot.api.script.AbstractScript;
+import org.dreambot.api.script.Category;
+import org.dreambot.api.script.ScriptManifest;
+import org.dreambot.api.utilities.Logger;
+import org.dreambot.api.utilities.Sleep;
+import org.dreambot.api.wrappers.items.Item;
+
+@ScriptManifest(name = "@GE Tanning Leather", description = "Makes Leather", author = "@",
+version = 1.1, category = Category.MAGIC, image = "https://i.imgur.com/2tJb6pc.png")   
+
+public class LeatherMaker extends AbstractScript {
+
+	public boolean isRunning;
+	public String Leather;
+	private JFrame frame;
+	private Image image;
+	
+	private long StartTime;
+	
+	int TansMade;
+	int Difference;
+	int Profit;
+
+	
+	@Override
+	public void onStart() {
+        try {
+            // Load the image from a URL
+            URL imageUrl = new URL("https://i.imgur.com/nA6QbLS.png");
+            image = ImageIO.read(imageUrl);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        SwingUtilities.invokeLater(() -> {
+            GUI();
+        });
+
+		SkillTracker.start(Skill.MAGIC);
+		SkillTracker.getGainedExperience(Skill.MAGIC);
+		StartTime = System.currentTimeMillis();
+	}
+	
+	@Override
+	public int onLoop() {
+		if(isRunning) {
+			Does();
+			
+			
+			
+		}
+		
+		return 0;
+	}
+	
+	public void Does() {
+		//Opening the Bank
+		if(!Bank.open()) {
+			Bank.open(BankLocation.GRAND_EXCHANGE);
+			Sleep.sleepUntil(() -> Bank.isOpen(), 9000);
+		}
+		Bank.depositAllExcept("Rune pouch","Astral rune","Fire rune","Nature rune",Leather);
+		//Depositing
+		if(Inventory.isFull()) {
+			String LeatherChoosen = "leather";
+			for (Item item : Inventory.all()) {
+				if(item.getName().contains(LeatherChoosen)) {
+					Bank.depositAll(item);
+					Sleep.sleepUntil(() -> !Inventory.contains(item), 2000);
+					
+				}
+			}
+		}
+
+		//Withdrawing the Stuffs
+		if(!Inventory.isFull()) {
+			if(Bank.count(Leather) < 28) {
+				Logger.log("Low hides. Stopped");
+				stop();
+			}
+			Bank.withdrawAll(Leather);
+			Sleep.sleepUntil(() -> Inventory.isFull(), 5000);
+		}
+		Bank.close();
+		doOnLoop();
+		if(!Tabs.isOpen(Tab.MAGIC)) {
+			Tabs.openWithFKey(Tab.MAGIC);
+		}
+		
+		//tans
+		while(Inventory.count(Leather) > 5) {
+			if(Widgets.getWidget(218).getChild(119).getTextureId() == 633) {
+				Logger.log("Out of Runes to cast. Stopped");
+				stop();
+				
+			}
+			Widgets.getWidget(218).getChild(119).interact();
+			TansMade += 5;
+			Sleep.sleep(1500,2400);
+		}
+	}
+
+	
+	public void onPaint(Graphics2D g) {
+	    //image
+	    super.onPaint(g);
+	    g.drawImage(image, 0, 0, null);
+	Color green = new Color(0,100,0);
+	g.setColor(green);
+	Color red = new Color(255, 0, 0);
+	Color blue = new Color(0, 0, 255);
+	Color black = new Color(0, 0, 0);
+	if(Leather == "Green dragonhide") {
+		g.setColor(green);
+	}
+	else if(Leather == "Red dragonhide") {
+		g.setColor(red);
+	}
+	else if(Leather == "Blue dragonhide") {
+		g.setColor(blue);
+	}
+	else if(Leather == "Black dragonhide") {
+		g.setColor(black);
+	}
+
+	double ExpGained = SkillTracker.getGainedExperience(Skill.MAGIC);
+	int ExpGainedToshow = (int) (ExpGained / 1000);
+	//Next line will draw the the Exp gained.
+	g.drawString("Experience gained: "+ExpGainedToshow+"k",30,70);
+	long elapsedTime = System.currentTimeMillis() - StartTime;
+	double expPerHour = SkillTracker.getGainedExperiencePerHour(Skill.MAGIC);
+	int Exp = (int) (expPerHour / 1000);
+	// The next line draw the exp per hour.
+	g.drawString("Experience per Hour: "+Exp+"K/PH",30,90);
+	int seconds = (int) (elapsedTime / 1000) %60;
+    int minutes = (int) ((elapsedTime / (1000*60)) %60);
+    int hours = (int) ((elapsedTime / (1000*60*60)) %24);
+    // The next line will draw the time the script has been running.
+    g.drawString("Time Running: "+ hours + "h " + minutes + "m " + seconds + "s", 30, 110);
+    //Profit
+    String[] Words = Leather.split(" ");
+    String Word = Words[0];
+    Difference = LivePrices.get(Word + " dragon leather") - LivePrices.get(Word + " dragonhide");
+    Profit = TansMade * Difference / 1000;
+    g.drawString("Profit made: "+Profit+"K",30,130);
+    //Tans
+    g.drawString("Leathers made: " + TansMade, 30, 150);
+
+    
+    
+}
+
+	
+	
+	public void GUI() {
+		int GreenPrice = LivePrices.get("Green dragon leather") - LivePrices.get("Green dragonhide");
+		int BluePrice = LivePrices.get("Blue dragon leather") - LivePrices.get("Blue dragonhide");
+		int RedPrice = LivePrices.get("Red dragon leather") - LivePrices.get("Red dragonhide");
+		int BlackPrice = LivePrices.get("Black dragon leather") - LivePrices.get("Black dragonhide");
+		frame = new JFrame();
+		frame.setTitle("@GE tanning leathers");
+		frame.setBounds(100, 100, 332, 319);
+		frame.setAlwaysOnTop(true);
+		frame.setLocationRelativeTo(null);
+		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+		
+		JLabel Instruction = new JLabel("Have all set to perform Tan Hide!");
+		
+		JLabel WhichLeather = new JLabel("Dragonhide:");
+		
+		JComboBox<String> LeatherChooser = new JComboBox<String>();
+		LeatherChooser.setMaximumRowCount(4);
+		LeatherChooser.setModel(new DefaultComboBoxModel<String>(new String[] {"Green dragonhide", "Blue dragonhide", "Red dragonhide", "Black dragonhide"}));
+		LeatherChooser.setSelectedIndex(0);
+		LeatherChooser.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				Leather = (String) LeatherChooser.getSelectedItem();
+			}
+		});
+		
+		JLabel ProfitTipLabel = new JLabel("Profit tip*:");
+		
+		JLabel GreenLabel = new JLabel("Green:");
+		
+		JLabel BlueLabel = new JLabel("Blue:");
+		
+		JLabel RedLabel = new JLabel("Red:");
+		
+		JLabel BlackLabel = new JLabel("Black");
+		
+		JLabel Green = new JLabel("Profit per piece: "+GreenPrice);
+		
+		JLabel Blue = new JLabel("Profit per piece: "+BluePrice);
+		
+		JLabel Red = new JLabel("Profit per piece: "+RedPrice);
+		
+		JLabel Black = new JLabel("Profit per piece: "+BlackPrice);
+		
+		JButton StartButton = new JButton("Start");
+		StartButton.addActionListener(l -> {
+			
+			Leather = (String) LeatherChooser.getSelectedItem();
+			isRunning = true;
+			frame.dispose();
+			
+			
+		});
+		
+		JLabel Adiviser = new JLabel("*Price based from the client source without the cost to cast!");
+		GroupLayout groupLayout = new GroupLayout(frame.getContentPane());
+		groupLayout.setHorizontalGroup(
+			groupLayout.createParallelGroup(Alignment.LEADING)
+				.addGroup(groupLayout.createSequentialGroup()
+					.addGap(17)
+					.addComponent(ProfitTipLabel)
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
+						.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
+							.addGroup(groupLayout.createSequentialGroup()
+								.addComponent(RedLabel, GroupLayout.PREFERRED_SIZE, 40, GroupLayout.PREFERRED_SIZE)
+								.addPreferredGap(ComponentPlacement.RELATED)
+								.addComponent(Red))
+							.addGroup(groupLayout.createSequentialGroup()
+								.addComponent(BlackLabel, GroupLayout.PREFERRED_SIZE, 40, GroupLayout.PREFERRED_SIZE)
+								.addPreferredGap(ComponentPlacement.RELATED)
+								.addComponent(Black)))
+						.addGroup(groupLayout.createSequentialGroup()
+							.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
+								.addGroup(groupLayout.createSequentialGroup()
+									.addComponent(BlueLabel, GroupLayout.PREFERRED_SIZE, 40, GroupLayout.PREFERRED_SIZE)
+									.addPreferredGap(ComponentPlacement.RELATED)
+									.addComponent(Blue))
+								.addGroup(groupLayout.createSequentialGroup()
+									.addComponent(GreenLabel)
+									.addPreferredGap(ComponentPlacement.RELATED)
+									.addComponent(Green)))
+							.addContainerGap(77, Short.MAX_VALUE))))
+				.addGroup(Alignment.TRAILING, groupLayout.createSequentialGroup()
+					.addContainerGap(107, Short.MAX_VALUE)
+					.addComponent(StartButton, GroupLayout.PREFERRED_SIZE, 123, GroupLayout.PREFERRED_SIZE)
+					.addGap(102))
+				.addGroup(groupLayout.createSequentialGroup()
+					.addContainerGap()
+					.addComponent(WhichLeather)
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
+						.addComponent(Instruction)
+						.addComponent(LeatherChooser, GroupLayout.PREFERRED_SIZE, 185, GroupLayout.PREFERRED_SIZE)
+						.addComponent(Adiviser))
+					.addContainerGap(46, Short.MAX_VALUE))
+		);
+		groupLayout.setVerticalGroup(
+			groupLayout.createParallelGroup(Alignment.LEADING)
+				.addGroup(groupLayout.createSequentialGroup()
+					.addContainerGap()
+					.addComponent(Instruction)
+					.addGap(33)
+					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
+						.addComponent(WhichLeather)
+						.addComponent(LeatherChooser, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE))
+					.addGap(33)
+					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
+						.addComponent(ProfitTipLabel)
+						.addComponent(GreenLabel)
+						.addComponent(Green))
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
+						.addComponent(BlueLabel)
+						.addComponent(Blue))
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
+						.addComponent(RedLabel)
+						.addComponent(Red))
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
+						.addComponent(BlackLabel)
+						.addComponent(Black))
+					.addGap(34)
+					.addComponent(Adiviser)
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addComponent(StartButton)
+					.addContainerGap(9, Short.MAX_VALUE))
+		);
+		frame.getContentPane().setLayout(groupLayout);
+		frame.pack();
+		frame.setVisible(true);
+	}
+
+	
+	private static void checkStats() {
+		Logger.log("Executing anti-ban checking status 1");
+		Skills.open();
+		Skills.hoverSkill(Skill.MAGIC);
+		Sleep.sleep(1200,30000);
+
+
+	}
+	// Anti-Ban Features
+		public int doOnLoop() {
+			
+			switch(Calculations.random(0, 20)) {
+			case 0:
+				setCameraToBank2();
+			break;
+
+			case 1,2,3:
+				checkStats();
+				break;
+			case 4:
+				setCameraToBank1();
+				break;
+			default:
+			break;
+				
+			
+			}
+			return Calculations.random(500, 1000);
+		}
+	
+	public void setCameraToBank1() {
+		int YawMin = 429;
+		int YawMax = 558;
+		//---------------
+		int ZoomMin = 181;
+		int ZoomMax = 249;
+		//---------------
+		int PitchMin = 337;
+		int PitchMax = 383;
+		//----------------
+		int finalZoom = Calculations.random(ZoomMin,ZoomMax);
+		int finalYaw = Calculations.random(YawMin,YawMax);
+		int finalPitch = Calculations.random(PitchMin,PitchMax);
+		//----------------
+		Camera.mouseRotateTo(finalYaw,finalPitch);
+		Camera.setZoom(finalZoom);
+	}
+	
+	public void setCameraToBank2() {
+		int YawMin = 1518;
+		int YawMax = 1665;
+		//---------------
+		int ZoomMin = 181;
+		int ZoomMax = 234;
+		//---------------
+		int PitchMin = 310;
+		int PitchMax = 383;
+		//----------------
+		int finalZoom = Calculations.random(ZoomMin,ZoomMax);
+		int finalYaw = Calculations.random(YawMin,YawMax);
+		int finalPitch = Calculations.random(PitchMin,PitchMax);
+		//----------------
+		Camera.mouseRotateTo(finalYaw,finalPitch);
+		Camera.setZoom(finalZoom);
+	}
+}
